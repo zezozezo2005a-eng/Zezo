@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>بوابة السائقين | المهام</title>
+    <style>
+        /* نفس الـ CSS بتاعك عشان يفضل الشكل زي ما هو */
+        * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+        body { background: #1a237e; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; }
+        .container { background: white; width: 95%; max-width: 450px; padding: 25px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        .login-box { text-align: center; }
+        input { width: 100%; padding: 12px; margin: 10px 0; border: 1px solid #ddd; border-radius: 8px; font-size: 1rem; text-align: center; }
+        button { width: 100%; padding: 12px; background: #ffc107; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 1rem; }
+        #driverContent { display: none; }
+        .order-card { background: #f8f9fa; border-right: 5px solid #2e7d32; padding: 15px; border-radius: 10px; margin-top: 15px; position: relative; }
+        .order-card.completed { border-right-color: #1a237e; opacity: 0.7; }
+        .status-badge { background: #e8f5e9; color: #2e7d32; padding: 4px 8px; border-radius: 5px; font-size: 0.8rem; font-weight: bold; }
+        .btn-finish { background: #1a237e; color: white; margin-top: 10px; transition: 0.3s; }
+        .btn-finish:disabled { background: #ccc; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div id="loginBox" class="login-box">
+        <h2>دخول السائق 🛺</h2>
+        <p>الرجاء إدخال الكود السري الخاص بك</p>
+        <input type="password" id="driverCode" placeholder="أدخل الكود السري (4 أرقام)">
+        <button onclick="loginDriver()">دخول للمهام</button>
+        <p id="errorMsg" style="color: red; display: none; margin-top: 10px;">كود غير صحيح!</p>
+    </div>
+
+    <div id="driverContent">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <h3 id="welcomeDriver">مرحباً بك</h3>
+            <button onclick="location.reload()" style="width: auto; padding: 5px 10px; background: #eee; font-size: 0.8rem;">خروج</button>
+        </div>
+        <hr style="margin: 10px 0;">
+        <h4>الطلبات الموجهة إليك:</h4>
+        <div id="myOrders"></div>
+    </div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+<script>
+    // 1. إعدادات فايربيز (نفس اللي معاك)
+    const firebaseConfig = {
+        apiKey: "AIzaSyC7xpFIK463RYFcOUM1E7A5EIXcTGNJPmE",
+        authDomain: "tuktuk-delivery-e06c0.firebaseapp.com",
+        projectId: "tuktuk-delivery-e06c0",
+        storageBucket: "tuktuk-delivery-e06c0.firebasestorage.app",
+        messagingSenderId: "107492432729",
+        appId: "1:107492432729:web:98675e2d0304dead840a48",
+        measurementId: "G-MS7MBBJE22"
+    };
+
+    // تهيئة فايربيز
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+
+    let currentLoggedDriver = null;
+
+    // 2. تسجيل دخول السائق باستخدام بيانات فايربيز
+    function loginDriver() {
+        const code = document.getElementById('driverCode').value;
+        
+        db.ref('drivers').once('value').then((snapshot) => {
+            const driversData = snapshot.val();
+            let foundDriver = null;
+
+            for (let id in driversData) {
+                if (driversData[id].password == code) {
+                    foundDriver = driversData[id];
+                    break;
+                }
+            }
+
+            if (foundDriver) {
+                currentLoggedDriver = foundDriver;
+                document.getElementById('loginBox').style.display = 'none';
+                document.getElementById('driverContent').style.display = 'block';
+                document.getElementById('welcomeDriver').innerText = "مرحباً: " + foundDriver.name;
+                
+                startListeningForOrders(); // ابدأ مراقبة الطلبات
+                if (Notification.permission !== "granted") Notification.requestPermission();
+            } else {
+                document.getElementById('errorMsg').style.display = 'block';
+            }
+        });
+    }
+
+    // 3. إتمام المشوار وتحديث فايربيز
+    function finishTrip(orderId) {
+        if(!confirm("هل أنت متأكد من إتمام المشوار والوصول؟")) return;
+
+        db.ref('orders/' + orderId).update({
+            status: 'completed'
+        }).then(() => {
+            alert("تم إبلاغ المطور بالوصول ✅");
+        });
+    }
+
+    // 4. الاستماع للطلبات بشكل مباشر (Realtime)
+    function startListeningForOrders() {
+        db.ref('orders').on('value', (snapshot) => {
+            const allOrders = snapshot.val() || {};
+            const myOrdersContainer = document.getElementById('myOrders');
+            
+            // تحويل الكائن لمصفوفة وتصفية طلبات السائق الحالي فقط
+            const myOrders = Object.keys(allOrders)
+                .map(key => ({ id: key, ...allOrders[key] }))
+                .filter(o => o.taken && o.driverInfo.phone === currentLoggedDriver.phone);
+
+            if (myOrders.length === 0) {
+                myOrdersContainer.innerHTML = "<p style='text-align:center; color:#999; margin-top:20px;'>لا توجد طلبات موجهة لك حالياً.</p>";
+                return;
+            }
+
+            // عرض الطلبات
+            myOrdersContainer.innerHTML = myOrders.reverse().map(o => {
+                const isCompleted = o.status === 'completed';
+                
+                // التنبيه إذا كان هناك طلب جديد لم يتم إبلاغ السائق به
+                if (o.taken && !o.notified && !isCompleted) {
+                    sendNotification(o);
+                    db.ref('orders/' + o.id).update({ notified: true });
+                }
+
+                return `
+                <div class="order-card ${isCompleted ? 'completed' : ''}">
+                    <div style="display:flex; justify-content:space-between;">
+                        <span class="status-badge" style="${isCompleted ? 'background:#e3f2fd; color:#1a237e;' : ''}">
+                            ${isCompleted ? '🏁 تم الوصول' : 'طلب جديد ✨'}
+                        </span>
+                        <small>${o.time}</small>
+                    </div>
+                    <p><b>الزبون:</b> ${o.name}</p>
+                    <p><b>من:</b> ${o.from} ⬅️ <b>إلى:</b> ${o.to}</p>
+                    <div style="display:flex; gap:10px; margin-top:10px;">
+                        <a href="tel:${o.phone}" style="flex:1; background:#eee; text-align:center; padding:8px; border-radius:5px; text-decoration:none; color:#1a237e; font-weight:bold;">📞 اتصال</a>
+                        <button class="btn-finish" onclick="finishTrip('${o.id}')" ${isCompleted ? 'disabled' : ''} style="flex:1; margin:0; padding:8px;">
+                            ${isCompleted ? 'تم الإرسال' : 'إتمام المشوار'}
+                        </button>
+                    </div>
+                </div>
+                `;
+            }).join('');
+        });
+    }
+
+    function sendNotification(order) {
+        if (Notification.permission === "granted") {
+            new Notification("مشوار جديد! 🚗", {
+                body: `من ${order.from} إلى ${order.to}`,
+            });
+            let audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+            audio.play();
+        }
+    }
+</script>
+</body>
+</html>
