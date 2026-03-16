@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>لوحة المطور | الحسابات والتعيين</title>
+    <style>
+        /* نفس الـ CSS بتاعك بدون تغيير */
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif; }
+        body { background: #f0f2f5; padding: 20px; }
+        .header-main { background: #1a237e; color: white; padding: 20px; border-radius: 15px; margin-bottom: 20px; text-align: center; }
+        .tabs { display: flex; gap: 10px; margin-bottom: 20px; justify-content: center; }
+        .tab-btn { padding: 12px 25px; border: none; border-radius: 8px; cursor: pointer; background: #fff; color: #1a237e; font-weight: bold; }
+        .tab-btn.active { background: #ffc107; color: black; }
+        .section { display: none; background: white; padding: 25px; border-radius: 15px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+        .active-section { display: block; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px; border-bottom: 1px solid #eee; text-align: right; vertical-align: middle; }
+        th { background: #f4f4f4; color: #1a237e; }
+        .money-input { width: 70px; padding: 8px; border: 1px solid #ddd; border-radius: 5px; text-align: center; }
+        .balance-badge { background: #fff3e0; color: #e65100; padding: 5px 12px; border-radius: 5px; font-weight: bold; min-width: 80px; display: inline-block; text-align: center; border: 1px solid #ffe0b2; }
+        .balance-ok { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+        .btn-update { background: #2196f3; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 0.9rem; font-weight: bold; }
+        .btn-assign { background: #2e7d32; color: white; border: none; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-weight: bold; margin-top: 5px; }
+        .btn-call { background: #1a237e; color: white; text-decoration: none; padding: 6px 10px; border-radius: 5px; font-size: 0.85rem; }
+        .btn-del { color: #d32f2f; background: none; border: 1px solid #ffcdd2; padding: 5px 10px; border-radius: 5px; cursor: pointer; font-size: 0.8rem; }
+        select { padding: 8px; border-radius: 5px; border: 1px solid #ddd; width: 100%; max-width: 150px; }
+        .status-waiting { color: orange; font-weight: bold; }
+        .status-assigned { color: green; font-weight: bold; }
+        .status-completed { color: #1a237e; font-weight: bold; background: #e3f2fd; padding: 4px 8px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <div class="header-main">
+        <h1>لوحة تحكم المطور | إدارة السائقين والطلبات 🚕</h1>
+    </div>
+
+    <div class="tabs">
+        <button class="tab-btn active" onclick="openSection('orders', this)">📦 الطلبات</button>
+        <button class="tab-btn" onclick="openSection('manageDrivers', this)">👥 إدارة وحسابات السائقين</button>
+    </div>
+
+    <div id="orders" class="section active-section">
+        <table id="ordersTable">
+            <thead>
+                <tr>
+                    <th>الوقت</th>
+                    <th>الزبون</th>
+                    <th>المسار</th>
+                    <th>السائق الموكل</th>
+                    <th>الحالة</th>
+                </tr>
+            </thead>
+            <tbody id="ordersList"></tbody>
+        </table>
+    </div>
+
+    <div id="manageDrivers" class="section">
+        <div style="background:#f8faff; padding:15px; border-radius:10px; margin-bottom:20px; display: flex; gap: 10px;">
+            <input type="text" id="dName" placeholder="اسم السائق">
+            <input type="tel" id="dPhone" placeholder="رقم الهاتف">
+            <button onclick="addNewDriver()">+ إضافة سائق</button>
+        </div>
+        <table id="driversTable">
+            <thead>
+                <tr>
+                    <th>اسم السائق</th>
+                    <th>رقم الهاتف</th>
+                    <th>الرصيد الحالي</th>
+                    <th>تعديل الرصيد (+/-)</th>
+                    <th>إدارة</th>
+                </tr>
+            </thead>
+            <tbody id="registeredDriversList"></tbody>
+        </table>
+    </div>
+
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-database-compat.js"></script>
+
+    <script>
+        // 1. إعدادات فايربيز (التي أرسلتها أنت)
+        const firebaseConfig = {
+            apiKey: "AIzaSyC7xpFIK463RYFcOUM1E7A5EIXcTGNJPmE",
+            authDomain: "tuktuk-delivery-e06c0.firebaseapp.com",
+            projectId: "tuktuk-delivery-e06c0",
+            storageBucket: "tuktuk-delivery-e06c0.firebasestorage.app",
+            messagingSenderId: "107492432729",
+            appId: "1:107492432729:web:98675e2d0304dead840a48",
+            measurementId: "G-MS7MBBJE22"
+        };
+
+        // 2. تهيئة فايربيز
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+
+        function openSection(id, btn) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active-section'));
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(id).classList.add('active-section');
+            btn.classList.add('active');
+        }
+
+        // 3. إضافة سائق لقاعدة البيانات
+        function addNewDriver() {
+            const name = document.getElementById('dName').value;
+            const phone = document.getElementById('dPhone').value;
+            const password = Math.floor(1000 + Math.random() * 9000); 
+
+            if(name && phone) {
+                db.ref('drivers/' + phone).set({
+                    name: name,
+                    phone: phone,
+                    password: password,
+                    balance: 0
+                }).then(() => {
+                    alert(`تم إضافة السائق: ${name}\nالكود السري هو: ${password}`);
+                    document.getElementById('dName').value = "";
+                    document.getElementById('dPhone').value = "";
+                });
+            } else {
+                alert("يرجى ملء البيانات");
+            }
+        }
+
+        // 4. تعيين سائق لطلب
+        function assignDriverToOrder(orderId) {
+            const selectBox = document.getElementById(`select-${orderId}`);
+            const selectedPhone = selectBox.value;
+
+            if(!selectedPhone) {
+                alert("يرجى اختيار سائق من القائمة");
+                return;
+            }
+
+            // جلب بيانات السائق أولاً
+            db.ref('drivers/' + selectedPhone).once('value').then((snapshot) => {
+                const driver = snapshot.val();
+                // تحديث الطلب في فايربيز
+                db.ref('orders/' + orderId).update({
+                    taken: true,
+                    driverInfo: { name: driver.name, phone: driver.phone },
+                    notified: false,
+                    status: 'assigned'
+                });
+                alert("تم إرسال المشوار للسائق: " + driver.name);
+            });
+        }
+
+        // 5. تحديث الرصيد
+        function updateBalance(phone) {
+            const amountInput = document.getElementById(`amount-${phone}`);
+            const amount = parseFloat(amountInput.value);
+            if(isNaN(amount)) return;
+
+            const driverRef = db.ref('drivers/' + phone + '/balance');
+            driverRef.transaction((currentBalance) => {
+                return (currentBalance || 0) + amount;
+            });
+            amountInput.value = "";
+        }
+
+        // 6. حذف سائق
+        function deleteDriver(phone) {
+            if(confirm("سيتم مسح بيانات السائق، هل أنت متأكد؟")) {
+                db.ref('drivers/' + phone).remove();
+            }
+        }
+
+        // 7. الاستماع للبيانات مباشرة (Realtime)
+        // استماع للطلبات
+        db.ref('orders').on('value', (snapshot) => {
+            const ordersData = snapshot.val() || {};
+            const ordersArray = Object.keys(ordersData).map(key => ({id: key, ...ordersData[key]}));
+            
+            // نحتاج قائمة السائقين عشان الـ Select
+            db.ref('drivers').once('value').then((dSnapshot) => {
+                const driversData = dSnapshot.val() || {};
+                const driversArray = Object.values(driversData);
+                renderOrders(ordersArray, driversArray);
+            });
+        });
+
+        // استماع للسائقين
+        db.ref('drivers').on('value', (snapshot) => {
+            const driversData = snapshot.val() || {};
+            const driversArray = Object.values(driversData);
+            renderDrivers(driversArray);
+        });
+
+        function renderOrders(orders, myDrivers) {
+            const ordersList = document.getElementById('ordersList');
+            ordersList.innerHTML = orders.reverse().map(o => {
+                const driverOptions = myDrivers.map(d => `<option value="${d.phone}">${d.name}</option>`).join('');
+                
+                let currentStatusHtml = '<span class="status-waiting">⏳ في الانتظار</span>';
+                if (o.status === 'completed') {
+                    currentStatusHtml = '<span class="status-completed">🏁 تم الوصول</span>';
+                } else if (o.taken) {
+                    currentStatusHtml = '<span class="status-assigned">✅ تم التوجيه</span>';
+                }
+
+                return `
+                <tr>
+                    <td>${o.time || 'غير محدد'}</td>
+                    <td>${o.name}</td>
+                    <td>${o.from} ➡️ ${o.to}</td>
+                    <td>
+                        ${o.taken ? 
+                            `<b style="color:#1a237e">🚗 ${o.driverInfo.name}</b>` : 
+                            `<select id="select-${o.id}">
+                                <option value="">اختر سائق..</option>
+                                ${driverOptions}
+                            </select>
+                            <button class="btn-assign" onclick="assignDriverToOrder('${o.id}')">تعيين</button>`
+                        }
+                    </td>
+                    <td>${currentStatusHtml}</td>
+                </tr>
+                `;
+            }).join('');
+        }
+
+        function renderDrivers(myDrivers) {
+            const driversList = document.getElementById('registeredDriversList');
+            driversList.innerHTML = myDrivers.map(d => {
+                const isZero = (d.balance || 0) === 0;
+                return `
+                <tr>
+                    <td><b>${d.name}</b> <br><small style="color:#666">كود: ${d.password}</small></td>
+                    <td><a href="tel:${d.phone}" class="btn-call">📞 ${d.phone}</a></td>
+                    <td><span class="balance-badge ${isZero ? 'balance-ok' : ''}">${d.balance || 0} ج.م</span></td>
+                    <td>
+                        <input type="number" id="amount-${d.phone}" class="money-input" placeholder="0">
+                        <button class="btn-update" onclick="updateBalance('${d.phone}')">تحديث</button>
+                    </td>
+                    <td>
+                        <button class="btn-del" onclick="deleteDriver('${d.phone}')">حذف</button>
+                    </td>
+                </tr>
+                `;
+            }).join('');
+        }
+    </script> 
+</body>
+</html>
